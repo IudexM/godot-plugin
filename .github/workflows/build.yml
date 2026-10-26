@@ -97,14 +97,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
+      - name: Setup Android SDK and NDK
       - name: Install Android NDK
+        shell: bash
         run: |
-          NDK_VERSION="26.1.10909125"
-          sdkmanager --install "ndk;${NDK_VERSION}"
-          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
+          SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f | sort -V | tail -n 1)"
+          fi
+
+          echo "Using sdkmanager: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" --install "ndk;26.1.10909125"
+
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/26.1.10909125" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/26.1.10909125" >> "$GITHUB_ENV"
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
