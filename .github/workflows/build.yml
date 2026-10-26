@@ -3,7 +3,7 @@ name: Build NodeTunnel Plugin
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -14,20 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
-      
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev
-      
+
       - name: Build Linux
         run: cargo build --release --target x86_64-unknown-linux-gnu
         working-directory: src
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -38,15 +38,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-      
+
       - name: Build Windows
         run: cargo build --release --target x86_64-pc-windows-msvc
         working-directory: src
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -57,19 +57,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
-      
+
       - name: Build macOS x86_64
         run: cargo build --release --target x86_64-apple-darwin
         working-directory: src
-      
+
       - name: Build macOS ARM64
         run: cargo build --release --target aarch64-apple-darwin
         working-directory: src
-      
+
       - name: Create Universal Binary
         run: |
           lipo -create \
@@ -77,43 +77,87 @@ jobs:
             target/aarch64-apple-darwin/release/libnodetunnel.dylib \
             -output libnodetunnel.dylib
         working-directory: src
-      
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-binary
           path: src/libnodetunnel.dylib
-
-  package:
-    needs: [build-linux, build-windows, build-macos]
+  build-android:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          NDK_VERSION="26.1.10909125"
+          sdkmanager --install "ndk;${NDK_VERSION}"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Build Android ARM64
+        run: cargo ndk -t arm64-v8a build --release
+        working-directory: src
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64-binary
+          path: src/target/aarch64-linux-android/release/libnodetunnel.so
+
+  package:
+    needs: [build-linux, build-windows, build-macos, build-android]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Create plugin structure
         run: |
           mkdir -p addons/nodetunnel/bin
           rm -f addons/nodetunnel/bin/*
-      
+          mkdir -p addons/nodetunnel/bin/android/arm64
+          find addons/nodetunnel/bin -maxdepth 1 -type f -delete
+          find addons/nodetunnel/bin/android/arm64 -type f -delete
+
       - name: Download Linux binary
         uses: actions/download-artifact@v4
         with:
           name: linux-binary
           path: addons/nodetunnel/bin/
-      
+
       - name: Download Windows binary
         uses: actions/download-artifact@v4
         with:
           name: windows-binary
           path: addons/nodetunnel/bin/
-      
+
       - name: Download macOS binary
         uses: actions/download-artifact@v4
         with:
           name: macos-binary
           path: addons/nodetunnel/bin/
-      
+
+      - name: Download Android ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: android-arm64-binary
+          path: addons/nodetunnel/bin/android/arm64/
+
       - name: Create plugin archive
         working-directory: addons
         run: |
@@ -127,7 +171,7 @@ jobs:
           path: |
             nodetunnel.zip
             nodetunnel.tar
-      
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
