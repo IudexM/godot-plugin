@@ -97,7 +97,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip
 
-      - name: Setup Android SDK and NDK
       - name: Install Android NDK
         shell: bash
         run: |
